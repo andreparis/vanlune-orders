@@ -1,0 +1,503 @@
+AWSTemplateFormatVersion: 2010-09-09
+Transform: 'AWS::Serverless-2016-10-31'
+Description: An AWS Serverless Application.
+Parameters:
+  SecurityGroupId:
+    Default: sg-02dbdd82f513a7733
+    Type: 'AWS::EC2::SecurityGroup::Id'
+  SubNetId1:
+    Default: subnet-037e8b801c1e77db5
+    Type: 'AWS::EC2::Subnet::Id'
+  SubNetId2:
+    Default: subnet-0309164262b4dd853
+    Type: 'AWS::EC2::Subnet::Id'
+  EnvironmentType:
+    Description: The environment type
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - uat
+      - prod
+    ConstraintDescription: 'Must be dev, uat or prod'
+Mappings:
+  EnvironmentVariablesMap:
+    Function.Properties.CodeUri.Bucket:
+      dev: vanlune-bin-dev
+      uat: vanlune-bin-uat
+      prod: vanlune-bin-prod
+    Function.Properties.Orders.Bucket:
+      dev: vanlune-database
+      uat: vanlune-database
+      prod: vanlune-database
+    Stage.ApiGateway:
+      dev: Dev
+      uat: Uat
+      prod: Prod
+    DbSecretName: 
+      dev: db-dev
+      uat: db-dev
+      prod: db-dev
+Resources:
+ # API Functinos
+  ApiGatewayApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Auth: 
+        AddDefaultAuthorizerToCorsPreflight: False
+        Authorizers: 
+          LambdaAuth: 
+            FunctionArn: arn:aws:lambda:us-east-1:277944362602:function:vanlune-auth
+            FunctionPayloadType: TOKEN
+            Type: Lambda
+            Identity:
+              Header: AuthorizationToken
+              ReauthorizeEvery: 0
+        DefaultAuthorizer: LambdaAuth
+      StageName: !FindInMap 
+        - EnvironmentVariablesMap
+        - Stage.ApiGateway
+        - !Ref EnvironmentType
+      Cors:
+        AllowMethods: "'*'"
+        AllowHeaders: "'*'"
+        AllowOrigin: "'*'"
+        MaxAge: "'600'"
+  GatewayResponse:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'*'"
+      ResponseType: MISSING_AUTHENTICATION_TOKEN
+      RestApiId: !Ref ApiGatewayApi
+      StatusCode: '404'
+  GatewayNotAuthResponse:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'*'"
+      ResponseType: UNAUTHORIZED
+      RestApiId: !Ref ApiGatewayApi
+      StatusCode: '401'
+  GatewayResponseDefault4XX:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'*'"
+      ResponseType: DEFAULT_4XX
+      RestApiId: !Ref ApiGatewayApi
+  GatewayResponseDefault5XX:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'*'"
+      ResponseType: DEFAULT_5XX
+      RestApiId: !Ref ApiGatewayApi
+  AuthPermission:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: arn:aws:lambda:us-east-1:277944362602:function:vanlune-auth
+      Principal: "apigateway.amazonaws.com"
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayApi}/authorizers/LambdaAuth"
+  CreateOrders:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      FunctionName: vanlune-orders-create
+      Handler: >-
+        Orders.Application::Orders.Application.Function::CreateOrders
+      Runtime: dotnetcore3.1
+      CodeUri:
+        Bucket: !FindInMap 
+          - EnvironmentVariablesMap
+          - Function.Properties.CodeUri.Bucket
+          - !Ref EnvironmentType
+        Key: Orders.zip
+      MemorySize: 256
+      Timeout: 900
+      Role: !Join ['', ['arn:aws:iam::', !Ref 'AWS::AccountId', ':role/role-lambda-vanlune']]
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Tracing: Active
+      Events:
+        HttpPost: 
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGatewayApi
+            Path: '/orders'
+            Method: post        
+      Environment:
+        Variables:
+          AWS_S3_Bucket: !FindInMap 
+            - EnvironmentVariablesMap
+            - Function.Properties.Orders.Bucket
+            - !Ref EnvironmentType
+          CONN_STRING: !FindInMap 
+            - EnvironmentVariablesMap
+            - DbSecretName
+            - !Ref EnvironmentType
+          AWS_SNS_URL: "https://sv82auhxwk.execute-api.us-east-1.amazonaws.com/Dev/aws/int/sns"
+          AWS_SECRET_URL: "https://sv82auhxwk.execute-api.us-east-1.amazonaws.com/Dev/aws/int/secret"
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref SecurityGroupId
+        SubnetIds:
+          - !Ref SubNetId1
+          - !Ref SubNetId2
+  UpdateOrder:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      FunctionName: vanlune-orders-update
+      Handler: >-
+        Orders.Application::Orders.Application.Function::UpdateOrder
+      Runtime: dotnetcore3.1
+      CodeUri:
+        Bucket: !FindInMap 
+          - EnvironmentVariablesMap
+          - Function.Properties.CodeUri.Bucket
+          - !Ref EnvironmentType
+        Key: Orders.zip
+      MemorySize: 256
+      Timeout: 900
+      Role: !Join ['', ['arn:aws:iam::', !Ref 'AWS::AccountId', ':role/role-lambda-vanlune']]
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Tracing: Active
+      Events:
+        HttpPost: 
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGatewayApi
+            Path: '/orders'
+            Method: put        
+      Environment:
+        Variables:
+          AWS_S3_Bucket: !FindInMap 
+            - EnvironmentVariablesMap
+            - Function.Properties.Orders.Bucket
+            - !Ref EnvironmentType
+          CONN_STRING: !FindInMap 
+            - EnvironmentVariablesMap
+            - DbSecretName
+            - !Ref EnvironmentType
+          AWS_SNS_URL: "https://sv82auhxwk.execute-api.us-east-1.amazonaws.com/Dev/aws/int/sns"
+          AWS_SECRET_URL: "https://sv82auhxwk.execute-api.us-east-1.amazonaws.com/Dev/aws/int/secret"
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref SecurityGroupId
+        SubnetIds:
+          - !Ref SubNetId1
+          - !Ref SubNetId2
+  AssignOrders:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      FunctionName: vanlune-orders-assign
+      Handler: >-
+        Orders.Application::Orders.Application.Function::AssignOrders
+      Runtime: dotnetcore3.1
+      CodeUri:
+        Bucket: !FindInMap 
+          - EnvironmentVariablesMap
+          - Function.Properties.CodeUri.Bucket
+          - !Ref EnvironmentType
+        Key: Orders.zip
+      MemorySize: 256
+      Timeout: 900
+      Role: !Join ['', ['arn:aws:iam::', !Ref 'AWS::AccountId', ':role/role-lambda-vanlune']]
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Tracing: Active
+      Events:
+        HttpPost: 
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGatewayApi
+            Path: '/orders/assign'
+            Method: post        
+      Environment:
+        Variables:
+          AWS_S3_Bucket: !FindInMap 
+            - EnvironmentVariablesMap
+            - Function.Properties.Orders.Bucket
+            - !Ref EnvironmentType
+          CONN_STRING: !FindInMap 
+            - EnvironmentVariablesMap
+            - DbSecretName
+            - !Ref EnvironmentType
+          AWS_SNS_URL: "https://sv82auhxwk.execute-api.us-east-1.amazonaws.com/Dev/aws/int/sns"
+          AWS_SECRET_URL: "https://sv82auhxwk.execute-api.us-east-1.amazonaws.com/Dev/aws/int/secret"
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref SecurityGroupId
+        SubnetIds:
+          - !Ref SubNetId1
+          - !Ref SubNetId2
+  GetOrdersByUserId:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      FunctionName: vanlune-orders-get-user-id
+      Handler: >-
+        Orders.Application::Orders.Application.Function::GetOrdersByUserId
+      Runtime: dotnetcore3.1
+      CodeUri:
+        Bucket: !FindInMap 
+          - EnvironmentVariablesMap
+          - Function.Properties.CodeUri.Bucket
+          - !Ref EnvironmentType
+        Key: Orders.zip
+      MemorySize: 256
+      Timeout: 900
+      Role: !Join ['', ['arn:aws:iam::', !Ref 'AWS::AccountId', ':role/role-lambda-vanlune']]
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Tracing: Active
+      Events:
+        HttpPost: 
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGatewayApi
+            Path: '/orders/user'
+            Method: get        
+      Environment:
+        Variables:
+          AWS_S3_Bucket: !FindInMap 
+            - EnvironmentVariablesMap
+            - Function.Properties.Orders.Bucket
+            - !Ref EnvironmentType
+          CONN_STRING: !FindInMap 
+            - EnvironmentVariablesMap
+            - DbSecretName
+            - !Ref EnvironmentType
+          AWS_SNS_URL: "https://sv82auhxwk.execute-api.us-east-1.amazonaws.com/Dev/aws/int/sns"
+          AWS_SECRET_URL: "https://sv82auhxwk.execute-api.us-east-1.amazonaws.com/Dev/aws/int/secret"
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref SecurityGroupId
+        SubnetIds:
+          - !Ref SubNetId1
+          - !Ref SubNetId2
+  GetOrdersByStatus:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      FunctionName: vanlune-orders-get-status
+      Handler: >-
+        Orders.Application::Orders.Application.Function::GetOrdersByStatus
+      Runtime: dotnetcore3.1
+      CodeUri:
+        Bucket: !FindInMap 
+          - EnvironmentVariablesMap
+          - Function.Properties.CodeUri.Bucket
+          - !Ref EnvironmentType
+        Key: Orders.zip
+      MemorySize: 256
+      Timeout: 900
+      Role: !Join ['', ['arn:aws:iam::', !Ref 'AWS::AccountId', ':role/role-lambda-vanlune']]
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Tracing: Active
+      Events:
+        HttpPost: 
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGatewayApi
+            Path: '/orders/status'
+            Method: get        
+      Environment:
+        Variables:
+          AWS_S3_Bucket: !FindInMap 
+            - EnvironmentVariablesMap
+            - Function.Properties.Orders.Bucket
+            - !Ref EnvironmentType
+          CONN_STRING: !FindInMap 
+            - EnvironmentVariablesMap
+            - DbSecretName
+            - !Ref EnvironmentType
+          AWS_SNS_URL: "https://sv82auhxwk.execute-api.us-east-1.amazonaws.com/Dev/aws/int/sns"
+          AWS_SECRET_URL: "https://sv82auhxwk.execute-api.us-east-1.amazonaws.com/Dev/aws/int/secret"
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref SecurityGroupId
+        SubnetIds:
+          - !Ref SubNetId1
+          - !Ref SubNetId2
+  GetOrdersByEmail:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      FunctionName: vanlune-orders-get-user-email
+      Handler: >-
+        Orders.Application::Orders.Application.Function::GetOrdersByEmail
+      Runtime: dotnetcore3.1
+      CodeUri:
+        Bucket: !FindInMap 
+          - EnvironmentVariablesMap
+          - Function.Properties.CodeUri.Bucket
+          - !Ref EnvironmentType
+        Key: Orders.zip
+      MemorySize: 256
+      Timeout: 900
+      Role: !Join ['', ['arn:aws:iam::', !Ref 'AWS::AccountId', ':role/role-lambda-vanlune']]
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Tracing: Active
+      Events:
+        HttpPost: 
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGatewayApi
+            Path: '/orders/user/email'
+            Method: get        
+      Environment:
+        Variables:
+          AWS_S3_Bucket: !FindInMap 
+            - EnvironmentVariablesMap
+            - Function.Properties.Orders.Bucket
+            - !Ref EnvironmentType
+          CONN_STRING: !FindInMap 
+            - EnvironmentVariablesMap
+            - DbSecretName
+            - !Ref EnvironmentType
+          AWS_SNS_URL: "https://sv82auhxwk.execute-api.us-east-1.amazonaws.com/Dev/aws/int/sns"
+          AWS_SECRET_URL: "https://sv82auhxwk.execute-api.us-east-1.amazonaws.com/Dev/aws/int/secret"
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref SecurityGroupId
+        SubnetIds:
+          - !Ref SubNetId1
+          - !Ref SubNetId2
+  GetAllOrders:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      FunctionName: vanlune-orders-get-all
+      Handler: >-
+        Orders.Application::Orders.Application.Function::GetAllOrders
+      Runtime: dotnetcore3.1
+      CodeUri:
+        Bucket: !FindInMap 
+          - EnvironmentVariablesMap
+          - Function.Properties.CodeUri.Bucket
+          - !Ref EnvironmentType
+        Key: Orders.zip
+      MemorySize: 256
+      Timeout: 900
+      Role: !Join ['', ['arn:aws:iam::', !Ref 'AWS::AccountId', ':role/role-lambda-vanlune']]
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Tracing: Active
+      Events:
+        HttpPost: 
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGatewayApi
+            Path: '/orders/all'
+            Method: get        
+      Environment:
+        Variables:
+          AWS_S3_Bucket: !FindInMap 
+            - EnvironmentVariablesMap
+            - Function.Properties.Orders.Bucket
+            - !Ref EnvironmentType
+          CONN_STRING: !FindInMap 
+            - EnvironmentVariablesMap
+            - DbSecretName
+            - !Ref EnvironmentType
+          AWS_SNS_URL: "https://sv82auhxwk.execute-api.us-east-1.amazonaws.com/Dev/aws/int/sns"
+          AWS_SECRET_URL: "https://sv82auhxwk.execute-api.us-east-1.amazonaws.com/Dev/aws/int/secret"
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref SecurityGroupId
+        SubnetIds:
+          - !Ref SubNetId1
+          - !Ref SubNetId2
+  GetOrdersByFilters:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      FunctionName: vanlune-orders-get-by-filters
+      Handler: >-
+        Orders.Application::Orders.Application.Function::GetOrdersByFilters
+      Runtime: dotnetcore3.1
+      CodeUri:
+        Bucket: !FindInMap 
+          - EnvironmentVariablesMap
+          - Function.Properties.CodeUri.Bucket
+          - !Ref EnvironmentType
+        Key: Orders.zip
+      MemorySize: 256
+      Timeout: 900
+      Role: !Join ['', ['arn:aws:iam::', !Ref 'AWS::AccountId', ':role/role-lambda-vanlune']]
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Tracing: Active
+      Events:
+        HttpPost: 
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGatewayApi
+            Path: '/orders/filters'
+            Method: get        
+      Environment:
+        Variables:
+          AWS_S3_Bucket: !FindInMap 
+            - EnvironmentVariablesMap
+            - Function.Properties.Orders.Bucket
+            - !Ref EnvironmentType
+          CONN_STRING: !FindInMap 
+            - EnvironmentVariablesMap
+            - DbSecretName
+            - !Ref EnvironmentType
+          AWS_SNS_URL: "https://sv82auhxwk.execute-api.us-east-1.amazonaws.com/Dev/aws/int/sns"
+          AWS_SECRET_URL: "https://sv82auhxwk.execute-api.us-east-1.amazonaws.com/Dev/aws/int/secret"
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref SecurityGroupId
+        SubnetIds:
+          - !Ref SubNetId1
+          - !Ref SubNetId2
+  Paypal:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      FunctionName: vanlune-orders-paypal
+      Handler: >-
+        Orders.Application::Orders.Application.Function::Paypal
+      Runtime: dotnetcore3.1
+      CodeUri:
+        Bucket: !FindInMap 
+          - EnvironmentVariablesMap
+          - Function.Properties.CodeUri.Bucket
+          - !Ref EnvironmentType
+        Key: Orders.zip
+      MemorySize: 256
+      Timeout: 900
+      Role: !Join ['', ['arn:aws:iam::', !Ref 'AWS::AccountId', ':role/role-lambda-vanlune']]
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Tracing: Active
+      Events:
+        HttpPost: 
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGatewayApi
+            Path: '/orders/paypal'
+            Method: post        
+      Environment:
+        Variables:
+          AWS_S3_Bucket: !FindInMap 
+            - EnvironmentVariablesMap
+            - Function.Properties.Orders.Bucket
+            - !Ref EnvironmentType
+          CONN_STRING: !FindInMap 
+            - EnvironmentVariablesMap
+            - DbSecretName
+            - !Ref EnvironmentType
+          AWS_SNS_URL: "https://sv82auhxwk.execute-api.us-east-1.amazonaws.com/Dev/aws/int/sns"
+          AWS_SECRET_URL: "https://sv82auhxwk.execute-api.us-east-1.amazonaws.com/Dev/aws/int/secret"
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref SecurityGroupId
+        SubnetIds:
+          - !Ref SubNetId1
+          - !Ref SubNetId2
+

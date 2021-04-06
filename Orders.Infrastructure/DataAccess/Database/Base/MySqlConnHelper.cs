@@ -22,8 +22,6 @@ namespace Orders.Infrastructure.DataAccess.Database.Base
             _connectionString = $@"server={secret.Host};
                                 userid={secret.Username};
                                 password={secret.Password};
-                                userid=usr_vanlune_dev;
-                                password=FJL6ftJdha6jmh!;
                                 database=Vanlune;
                                 Pooling=True;
                                 Min Pool Size=0;

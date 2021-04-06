@@ -10,6 +10,14 @@ using Orders.Domain.DataAccess.Repositories;
 using Orders.Infrastructure.Messaging.SNS;
 using Orders.Domain.Messaging.SNS;
 using Orders.Infrastructure.DataAccess.Database;
+using StackExchange.Redis.Extensions.Core.Configuration;
+using System.Collections.Generic;
+using StackExchange.Redis.Extensions.Newtonsoft;
+using StackExchange.Redis.Extensions.Core.Abstractions;
+using StackExchange.Redis.Extensions.Core.Implementations;
+using System.Diagnostics;
+using Orders.Domain.Rest;
+using Orders.Infrastructure.Rest;
 
 namespace Orders.Application.Extensions
 {
@@ -30,8 +38,10 @@ namespace Orders.Application.Extensions
 
             services.AddSingleton<IMySqlConnHelper, MySqlConnHelper>();
             services.AddSingleton<IOrderRepository, OrderRepository>();
-
+            services.AddSingleton<ISecretApi, SecretApi>();
             services.AddSingleton<ISnsClient, SnsClient>();
+
+            services.AddHttpClient();
 
             return services;
         }

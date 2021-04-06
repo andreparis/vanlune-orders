@@ -6,7 +6,7 @@ using System.Text;
 
 namespace Orders.Application.Application.MediatR.Commands.Orders.GetOrder
 {
-    public class GetOrderCommand : IRequest<Response>
+    public class GetAllOrderCommand : IRequest<Response>
     {
     }
 }

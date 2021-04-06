@@ -1,4 +1,5 @@
 ﻿using Orders.Domain.Entities;
+using Orders.Domain.Entities.ExProduct;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -15,12 +16,25 @@ namespace Orders.Domain.Messaging.Email
         {
             var template = GetTemplateAsync("Orders.Domain.Messaging.Email.Templates.OrderTemplate.html");
 
-            template = template.Replace("#{{tableOrders}}", GetTableOrders(orders.Select(a => a.Product)));
+            template = template.Replace("#{{tableOrders}}", GetTableOrders(orders));
 
-            var totalPrice = orders.Sum(p => p.Product.Price * p.Product.Quantity).ToString();
+            var totalPrice = orders.Sum(p => p.Price * p.Quantity * p.Variant.Factor * GetExtrasFactor(p.Customizes)).ToString();
 
             template = template.Replace("#{{price}}", totalPrice);
-            template = template.Replace("#{{discount}}", "0");
+
+            if (orders.Any(o => o.Product.Discount > 0))
+            {
+                var productsDiscount = orders.Where(o => o.Product.Discount > 0);
+
+                var amountReal = productsDiscount.Sum(p => p.Price * p.Quantity);
+                var amountDiscount = productsDiscount.Sum(p => p.Price * p.Quantity * p.Discount) / 100;
+
+                var discount = amountReal - amountDiscount;
+
+                template = template.Replace("#{{discount}}", discount.ToString());
+            }
+            else
+                template = template.Replace("#{{discount}}", "0");
 
             template = template.Replace("#{{total}}", totalPrice);
 
@@ -42,30 +56,68 @@ namespace Orders.Domain.Messaging.Email
             return template;
         }
 
-        private static string GetTableOrders(IEnumerable<Product> products)
+        private static string GetTableOrders(IEnumerable<Order> orders)
         {
             var table = new StringBuilder();
 
-            foreach (var product in products)
+            foreach (var order in orders)
             {
                 table.Append("<tr>");
 
                 table.Append("<td valign=\"top\" style=\"padding-left: 15px; \">");
-                table.Append($"<h5 style=\"margin-top: 15px; \">{product.Title}</h5>");
+                table.Append($"<h5 style=\"font-size: 14px; color:#444;margin-top: 10px;\">{order.Id}</h5>");
                 table.Append("</td>");
 
                 table.Append("<td valign=\"top\" style=\"padding-left: 15px; \">");
-                table.Append($"<h5 style=\"font-size: 14px; color:#444;margin-top: 10px;\">{product.Quantity}</h5>");
+                table.Append($"<h5 style=\"margin-top: 15px; \">{order.Product.Title}</h5>");
                 table.Append("</td>");
 
                 table.Append("<td valign=\"top\" style=\"padding-left: 15px; \">");
-                table.Append($"<h5 style=\"font-size: 14px; color:#444;margin-top:15px\"><b>${Math.Round(product.Price * product.Quantity, 2)}</b></h5>");
+                table.Append($"<h5 style=\"font-size: 14px; color:#444;margin-top: 10px;\">{order.Quantity}</h5>");
+                table.Append("</td>");
+
+                table.Append("<td valign=\"top\" style=\"padding-left: 15px; \">");
+                table.Append($"<h5 style=\"font-size: 14px; color:#444;margin-top:15px\"><b>${Math.Round(order.Price, 2)}</b></h5>");
+                table.Append("</td>");
+
+                table.Append("<td valign=\"top\" style=\"padding-left: 15px; \">");
+                table.Append($"<h5 style=\"font-size: 14px; color:#444;margin-top:15px\"><b>{order.Variant.Name} x {order.Variant.Factor}</b></h5>");
+                table.Append("</td>");
+
+                table.Append("<td valign=\"top\" style=\"padding-left: 15px; \">");
+                table.Append($"<h5 style=\"font-size: 14px; color:#444;margin-top:15px\"><b>{GetExtrasAsStr(order.Customizes)}</b></h5>");
                 table.Append("</td>");
 
                 table.Append("</tr>");
             }
 
             return table.ToString();
+        }
+
+        private static string GetExtrasAsStr(IEnumerable<Customize> customizes)
+        {
+            var result = new StringBuilder();
+
+            foreach(var customize in customizes)
+            {
+                var value = customize.Value.First();
+                result.Append($"{customize.Name}: {value.Name} x {value.Factor}");
+            }
+
+            return result.ToString();
+        }
+    
+        private static decimal GetExtrasFactor(IEnumerable<Customize> customizes)
+        {
+            var result = (decimal)1;
+
+            foreach (var customize in customizes)
+            {
+                var value = customize.Value.First();
+                result *= value.Factor;
+            }
+
+            return result;
         }
     }
 }

@@ -9,6 +9,15 @@ using Amazon.Lambda.APIGatewayEvents;
 using System.Collections.Generic;
 using System.Net;
 using Orders.Application.Application.MediatR.Commands.Orders.CreateOrders;
+using Orders.Application.Application.MediatR.Commands.Orders.GetOrder;
+using Orders.Application.Application.MediatR.Commands.Orders.GetOrdersByEmail;
+using Orders.Application.Application.MediatR.Commands.Orders.GetOrdersByStatus;
+using Orders.Application.Application.MediatR.Commands.Orders.GetOrdersByUserId;
+using Orders.Domain.Enums;
+using Orders.Application.Application.MediatR.Commands.Orders.GetOrdersByFilters;
+using Orders.Application.Application.MediatR.Commands.Orders.UpdateOrder;
+using Orders.Application.Application.MediatR.Commands.Orders.AssignOrder;
+using Orders.Application.Application.MediatR.Commands.Orders.Paypal;
 
 [assembly: LambdaSerializer(typeof(Amazon.Lambda.Serialization.Json.JsonSerializer))]
 namespace Orders.Application
@@ -39,6 +48,88 @@ namespace Orders.Application
             lambdaContext.Logger.LogLine($"CreateOrders started");
 
             return Request<CreateOrdersCommand>(request.Body);
+        }
+
+        public APIGatewayProxyResponse UpdateOrder(APIGatewayProxyRequest request, ILambdaContext lambdaContext)
+        {
+            lambdaContext.Logger.LogLine($"UpdateOrder started");
+
+            return Request<UpdateOrderCommand>(request.Body);
+        }
+
+        public APIGatewayProxyResponse AssignOrders(APIGatewayProxyRequest request, ILambdaContext lambdaContext)
+        {
+            lambdaContext.Logger.LogLine($"UpdateOrder started");
+
+            return Request<AssignOrderCommand>(request.Body);
+        }
+
+        public APIGatewayProxyResponse GetOrdersByFilters(APIGatewayProxyRequest request, ILambdaContext lambdaContext)
+        {
+            lambdaContext.Logger.LogLine($"GetOrdersByFilters query");
+
+            var command = new GetOrdersByFiltersCommand()
+            {
+                Filters = request.QueryStringParameters
+            };
+
+            return MediatrSend(command);
+        }
+
+        public APIGatewayProxyResponse GetAllOrders(APIGatewayProxyRequest request, ILambdaContext lambdaContext)
+        {
+            lambdaContext.Logger.LogLine($"GetAllOrderCommand started");
+
+            return Request<GetAllOrderCommand>(request.Body);
+        }
+
+        public APIGatewayProxyResponse GetOrdersByEmail(APIGatewayProxyRequest request, ILambdaContext lambdaContext)
+        {
+            lambdaContext.Logger.LogLine($"CreateOrders started");
+
+            var email = request.QueryStringParameters["email"];
+
+            if (string.IsNullOrEmpty(email))
+                return Response("You must inform email!");
+
+            var command = new GetOrdersByEmailCommand() { Email = email };
+
+            return MediatrSend(command);
+        }
+
+        public APIGatewayProxyResponse GetOrdersByStatus(APIGatewayProxyRequest request, ILambdaContext lambdaContext)
+        {
+            lambdaContext.Logger.LogLine($"CreateOrders started");
+
+            var status = request.QueryStringParameters["status"];
+
+            if (string.IsNullOrEmpty(status))
+                return Response("You must inform email!");
+
+            var command = new GetOrdersByStatusCommand() { Status = (Status)Convert.ToInt32(status) };
+
+            return MediatrSend(command);
+        }
+
+        public APIGatewayProxyResponse GetOrdersByUserId(APIGatewayProxyRequest request, ILambdaContext lambdaContext)
+        {
+            lambdaContext.Logger.LogLine($"CreateOrders started");
+
+            var user = request.QueryStringParameters["user"];
+
+            if (string.IsNullOrEmpty(user))
+                return Response("You must inform email!");
+
+            var command = new GetOrdersByUserIdCommand() { UserId = Convert.ToInt32(user) };
+
+            return MediatrSend(command);
+        }
+
+        public APIGatewayProxyResponse Paypal(APIGatewayProxyRequest request, ILambdaContext lambdaContext)
+        {
+            lambdaContext.Logger.LogLine($"PaypalCommand started");
+
+            return Request<PaypalCommand>(request.Body);
         }
 
         #endregion

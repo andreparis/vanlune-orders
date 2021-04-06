@@ -6,10 +6,13 @@
 
   <ItemGroup>
     <None Remove="Messaging\Email\Templates\OrderTemplate.html" />
+    <None Remove="Messaging\Email\Templates\RefundTemplate.html" />
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Messaging\Email\Templates\RefundTemplate.html" />
     <EmbeddedResource Include="Messaging\Email\Templates\OrderTemplate.html" />
+    <EmbeddedResource Include="Messaging\Email\Templates\DisputeTemplate.html" />
   </ItemGroup>
 
   <ItemGroup>

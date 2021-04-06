@@ -4,6 +4,7 @@
     {
         InProgress = 1,
         Completed,
-        Canceled
+        Canceled,
+        InService
     }
 }

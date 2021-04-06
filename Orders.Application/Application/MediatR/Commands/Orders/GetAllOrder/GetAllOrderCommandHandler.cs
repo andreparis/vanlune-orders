@@ -1,8 +1,5 @@
 ﻿using Orders.Application.MediatR.Base;
 using Orders.Domain.DataAccess.Repositories;
-using System;
-using System.Collections.Generic;
-using System.Text;
 using System.Threading;
 
 namespace Orders.Application.Application.MediatR.Commands.Orders.GetOrder

@@ -41,15 +41,27 @@ namespace Orders.Application.Application.MediatR.Commands.Orders.CreateOrders
             {
                 return new HandleResponse()
                 {
-                    Error = "Review your orders!"
+                    Error = "You are trying to send invalid products"
                 };
             }
-            
+                       
+            var ordersId = _orderRepository.AddAllAsync(request.Orders).GetAwaiter().GetResult();
+
+            if (ordersId == null || 
+                !ordersId.Any())
+            {
+                return new HandleResponse()
+                { 
+                    Error = "Not possible create orders! Try again later!"
+                };
+            }
+
             SendOrderMail(request.Orders.FirstOrDefault().User, request.Orders).GetAwaiter().GetResult();
 
-            _orderRepository.AddAllAsync(request.Orders).GetAwaiter().GetResult();
-
-            return new HandleResponse();
+            return new HandleResponse() 
+            {
+                Content = ordersId
+            };
         }
 
         private async Task SendOrderMail(User user, IEnumerable<Order> orders)
@@ -57,10 +69,12 @@ namespace Orders.Application.Application.MediatR.Commands.Orders.CreateOrders
             var template = OrdersTemplate.GetOrderBody(orders);
 
             var message = new Message()
-            {
+            {                
                 Body = template,
                 To = user.Email,
-                Subject = $"{user.Name}, we have received your order"
+                Subject = $"{user.Name}, we have received your order",
+                From = "orders@player2.store",
+                Bcs = new List<string>() { "support@player2.store" }
             };
 
             await _snsClient.Send(_configuration["EMAIL_TOPIC"], 
